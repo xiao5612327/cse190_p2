@@ -18,14 +18,15 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = 1/800
-
+		self.weight = 1.0/800
 
 class Robot():
 	def __init__(self):
 		rospy.init_node("robot")
 		self.config = read_config()
-
+		self.num_particles = self.config['num_particles']
+		self.width = 0
+		self.height = 0
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
 			OccupancyGrid, 
@@ -51,9 +52,9 @@ class Robot():
 		self.pose_array.header.frame_id = 'map'
 		self.pose_array.poses = []
 		for i in range (800):
-			x = r.uniform (range(self.width))
-			y = r.uniform (range(self.height))
-			theta = r.uniform (range(1))
+			x = r.uniform (0, self.width)
+			y = r.uniform (0, self.height)
+			theta = r.uniform (0,1)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
 			particle.x = x
@@ -62,7 +63,6 @@ class Robot():
 			particle.pose = pose
 			self.particle_array.append(particle)
 			self.pose_array.poses.append(pose)
-			print pose
 			
 
 	def handle_map_data(self, data):
@@ -76,8 +76,7 @@ class Robot():
 		array = self.my_map.grid	
 		for i in range (grid.length):
 			for j in range (grid[0].length):
-				print "hi"
-			
+				print "hi"			
 	
 if __name__ == '__main__':
    r = Robot()
