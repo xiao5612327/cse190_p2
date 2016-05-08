@@ -2,7 +2,7 @@
 
 import rospy
 import random as r
-import math as m
+import math
 import numpy as np
 from copy import deepcopy
 from std_msgs.msg import Bool
@@ -90,22 +90,28 @@ class Robot():
 		self.create_particles()
 		self.make_move()
 
+
 	def make_move(self):
 		i = self.move_made
 		#add noise to x, y, theta when first move
 		if(i == 0):
 		    for a in range (self.num_particles):
 			#update x, y, theta and pose
-			self.particle_array[a].x =self.add_first_move_noise(self.particle_array[a].x)
-			self.particle_array[a].y =self.add_first_move_noise(self.particle_array[a].y)
-			self.particle_array[a].theta=self.add.first_move_noise(self.particle_array[a].theta)
+			self.particle_array[a].x = self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
+			self.particle_array[a].y = self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
+			self.particle_array[a].theta= self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
+			noise_x = self.particle_array[a].x
+			noise_y = self.particle_array[a].y
+			noise_theta = self.particle_array[a].theta
 			self.particle_array[a].pose = get_pose(noise_x, noise_y, noise_theta)
+
 		move_function(self.move_list[i][0], 0)
-		for j in range(self.move_list[i][2])
+
+		for j in range(self.move_list[i][2]):
 			move_function(0, self.move_list[i][1])
 					
-	def add_first_move_noise(self, coordinate)
-		noise = m.ceil(random.gauss(0, self.config['temp_noise_std_dev'])*100.)/100.
+	def add_first_move_noise(self, coordinate, sd):
+		noise = math.ceil(r.gauss(0, sd)*100.)/100.
 		added_noise = coordinate + noise
 		return added_noise
 
