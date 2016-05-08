@@ -11,6 +11,8 @@ from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import OccupancyGrid
 from read_config import read_config
 from helper_functions import get_pose
+from map_utils import Map
+from sklearn.neighbors import KDTree
 
 class Particle():
 	def __init__(self):
@@ -25,8 +27,7 @@ class Robot():
 		rospy.init_node("robot")
 		self.config = read_config()
 		self.num_particles = self.config['num_particles']
-		self.width = 0
-		self.height = 0
+		self.laser_sigma_hit = self.config['laser_sigma_hit']
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
 			OccupancyGrid, 
@@ -36,11 +37,17 @@ class Robot():
 		self.particle_pose_pub = rospy.Publisher(
 			"/particlecloud",
 			PoseArray,
-			queue_size = 1
+			queue_size = 1,
+			latch = True
+		)
+		
+		self.likelihood_pub = rospy.Publisher(
+			"/likelihood_field",
+			OccupancyGrid,
+			queue_size = 1,
+			latch = True
 		)
 
-		self.create_particles()		
-		self.handle_map()
 		rospy.spin()	
 
 
@@ -51,10 +58,10 @@ class Robot():
 		self.pose_array.header.stamp = rospy.Time.now()
 		self.pose_array.header.frame_id = 'map'
 		self.pose_array.poses = []
-		for i in range (800):
-			x = r.uniform (0, self.width)
-			y = r.uniform (0, self.height)
-			theta = r.uniform (0,1)
+		for i in range (self.num_particles):
+			x = r.random() * self.width
+			y = r.random() * self.height
+			theta = r.random() * 2 * math.pi
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
 			particle.x = x
@@ -64,19 +71,35 @@ class Robot():
 			self.particle_array.append(particle)
 			self.pose_array.poses.append(pose)
 			
+		self.particle_pose_pub.publish(self.pose_array)
+		self.construct_field()
 
 	def handle_map_data(self, data):
 		self.tmp_map = data
 		self.width = data.info.width
 		self.height = data.info.height
+		self.create_particles()		
 
-
-	def handle_map(self):
+	def construct_field(self):
 		self.my_map = Map(self.tmp_map)
+		self.my_map_width = self.my_map.width
+		self.my_map_height = self.my_map.height
 		array = self.my_map.grid	
-		for i in range (grid.length):
-			for j in range (grid[0].length):
-				print "hi"			
+		self.kdtree_array = []
+		for i in range (self.my_map_width):
+			for j in range (self.my_map_height):
+				coordinate = self.my_map.cell_position(i,j)
+			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
+				if( value == 1.0 ):
+					self.kdtree_array.append([j,i])	
+
+		#self.kdtree_array = np(self.kdtree_array)	
+		self.kdtree = KDTree (self.kdtree_array)
+		result = self.kdtree.query(self.kdtree_array, k=1, return_distance=True)
+
+		self.dist_array = result[0]
+		self.indices_array = result[1]
+		
 	
 if __name__ == '__main__':
    r = Robot()
