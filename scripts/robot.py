@@ -12,6 +12,7 @@ from nav_msgs.msg import OccupancyGrid
 from read_config import read_config
 from helper_functions import *
 from map_utils import Map
+from sensor_msgs.msg import LaserScan
 from sklearn.neighbors import KDTree
 
 class Particle():
@@ -41,6 +42,12 @@ class Robot():
 			OccupancyGrid, 
 			self.handle_map_data
 		)
+		
+		self.base_scan_data = rospy.Subscriber(
+			"/base_scan",
+			LaserScan,
+			self.handle_base_scan_data
+		)
 
 		self.particle_pose_pub = rospy.Publisher(
 			"/particlecloud",
@@ -58,6 +65,9 @@ class Robot():
 
 		rospy.spin()	
 
+
+	def handle_base_scan_data (self, data):
+		return data
 
 	def create_particles(self):
 		self.particle_array = []
