@@ -20,7 +20,7 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = 1.0/800
+		self.weight = np.float32(1/800)
 
 class Robot():
 	def __init__(self):
@@ -74,11 +74,13 @@ class Robot():
 		self.particle_pose_pub.publish(self.pose_array)
 		self.construct_field()
 
+
 	def handle_map_data(self, data):
 		self.tmp_map = data
 		self.width = data.info.width
 		self.height = data.info.height
 		self.create_particles()		
+
 
 	def construct_field(self):
 		self.my_map = Map(self.tmp_map)
@@ -88,18 +90,31 @@ class Robot():
 		self.kdtree_array = []
 		for i in range (self.my_map_width):
 			for j in range (self.my_map_height):
-				coordinate = self.my_map.cell_position(i,j)
-			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
+				self.coordinate = self.my_map.cell_position(i,j)
+			        value = self.my_map.get_cell(self.coordinate[0], self.coordinate[1])	
 				if( value == 1.0 ):
 					self.kdtree_array.append([j,i])	
 
-		#self.kdtree_array = np(self.kdtree_array)	
 		self.kdtree = KDTree (self.kdtree_array)
 		result = self.kdtree.query(self.kdtree_array, k=1, return_distance=True)
 
 		self.dist_array = result[0]
 		self.indices_array = result[1]
 		
+		self.update_field()
+
+
+	def update_field(self):
+		for i in range (len(self.dist_array)):
+			value = self.calculate (self.dist_array[i])
+			self.my_map.set_cell(self.coordinate[0], self.coordinate[1], value)
+
+
+	def calculate (self, distance):
+		power = np.float32(-1 * ((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
+		value = math.pow( math.e, power)
+		return value	
+
 	
 if __name__ == '__main__':
    r = Robot()
