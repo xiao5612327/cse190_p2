@@ -2,7 +2,7 @@
 
 import rospy
 import random as r
-import math
+import math as m
 import numpy as np
 from copy import deepcopy
 from std_msgs.msg import Bool
@@ -10,7 +10,7 @@ from std_msgs.msg import String, Float32
 from geometry_msgs.msg import PoseArray
 from nav_msgs.msg import OccupancyGrid
 from read_config import read_config
-from helper_functions import get_pose
+from helper_functions import *
 from map_utils import Map
 from sklearn.neighbors import KDTree
 
@@ -28,6 +28,14 @@ class Robot():
 		self.config = read_config()
 		self.num_particles = self.config['num_particles']
 		self.laser_sigma_hit = self.config['laser_sigma_hit']
+		#get move list and set move list length
+		self.move_list = self.config['move_list']
+		self.move_list_length = len(self.move_list)
+		#get first move segima x, y, and theta
+		self.first_move_sigma_x = self.config['first_move_sigma_x']
+		self.first_move_sigma_y = self.config['first_move_sigma_y']
+		self.first_move_sigma_angle = self.config['first_move_sigma_angle']
+		self.move_made = 0
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
 			OccupancyGrid, 
@@ -78,7 +86,27 @@ class Robot():
 		self.tmp_map = data
 		self.width = data.info.width
 		self.height = data.info.height
-		self.create_particles()		
+		self.create_particles()
+		self.make_move()
+
+	def make_move(self):
+		i = self.move_made
+		#add noise to x, y, theta when first move
+		if(i == 0);
+		    for a in range (self.num_partcle)
+			#update x, y, theta and pose
+			self.particle_array[a].x =self.add_first_move_noise(self.particle_array[a].x)
+			self.particle_array[a].y =self.add_first_move_noise(self.particle_array[a].y)
+			self.particle_array[a].theta=self.add.first_move_noise(self.particle_array[a].theta)
+			self.particle_array[a].pose = get_pose(noise_x, noise_y, noise_theta)
+		move_function(self.move_list[i][0], 0)
+		for j in range(self.move_list[i][2])
+			move_function(0, self.move_list[i][1])
+					
+	def add_first_move_noise(self, coordinate)
+		noise = m.ceil(random.gauss(0, self.config['temp_noise_std_dev'])*100.)/100.
+		added_noise = coordinate + noise
+		return added_noise
 
 	def construct_field(self):
 		self.my_map = Map(self.tmp_map)
