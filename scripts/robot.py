@@ -93,8 +93,8 @@ class Robot():
 	def make_move(self):
 		i = self.move_made
 		#add noise to x, y, theta when first move
-		if(i == 0);
-		    for a in range (self.num_partcle)
+		if(i == 0):
+		    for a in range (self.num_particles):
 			#update x, y, theta and pose
 			self.particle_array[a].x =self.add_first_move_noise(self.particle_array[a].x)
 			self.particle_array[a].y =self.add_first_move_noise(self.particle_array[a].y)
