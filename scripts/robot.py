@@ -88,31 +88,34 @@ class Robot():
 		self.my_map_height = self.my_map.height
 		array = self.my_map.grid	
 		self.kdtree_array = []
-		for i in range (self.my_map_width):
-			for j in range (self.my_map_height):
-				self.coordinate = self.my_map.cell_position(i,j)
-			        value = self.my_map.get_cell(self.coordinate[0], self.coordinate[1])	
+		for i in range (self.my_map_height):
+			for j in range (self.my_map_width):
+				coordinate = self.my_map.cell_position(i,j)
+			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
 				if( value == 1.0 ):
-					self.kdtree_array.append([j,i])	
+					self.kdtree_array.append([i,j])	
 
 		self.kdtree = KDTree (self.kdtree_array)
-		result = self.kdtree.query(self.kdtree_array, k=1, return_distance=True)
-
-		self.dist_array = result[0]
-		self.indices_array = result[1]
-		
 		self.update_field()
 
 
 	def update_field(self):
-		for i in range (len(self.dist_array)):
-			value = self.calculate (self.dist_array[i])
-			self.my_map.set_cell(self.coordinate[0], self.coordinate[1], value)
+		for i in range (self.my_map_height):
+			for j in range (self.my_map_width):
+				value = self.kdtree.query([[i,j]], k=1)
+				new_value = self.calculate (value[0][0])
+				coordinate = self.my_map.cell_position(i,j)
+				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
 
 
 	def calculate (self, distance):
-		power = np.float32(-1 * ((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
+		constant = 2 * math.pi
+		constant = np.float32(math.sqrt(constant)) * self.laser_sigma_hit
+		constant = np.float32(1.0/constant)
+		power = np.float32(-1 * 
+			((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
 		value = math.pow( math.e, power)
+		value = constant * value
 		return value	
 
 	
