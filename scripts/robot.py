@@ -20,7 +20,7 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = 1.0/800
+		self.weight = np.float32(1/800)
 
 class Robot():
 	def __init__(self):
@@ -82,6 +82,7 @@ class Robot():
 		self.particle_pose_pub.publish(self.pose_array)
 		self.construct_field()
 
+
 	def handle_map_data(self, data):
 		self.tmp_map = data
 		self.width = data.info.width
@@ -108,26 +109,43 @@ class Robot():
 		added_noise = coordinate + noise
 		return added_noise
 
+
 	def construct_field(self):
 		self.my_map = Map(self.tmp_map)
 		self.my_map_width = self.my_map.width
 		self.my_map_height = self.my_map.height
 		array = self.my_map.grid	
 		self.kdtree_array = []
-		for i in range (self.my_map_width):
-			for j in range (self.my_map_height):
+		for i in range (self.my_map_height):
+			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
 			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
 				if( value == 1.0 ):
-					self.kdtree_array.append([j,i])	
+					self.kdtree_array.append([i,j])	
 
-		#self.kdtree_array = np(self.kdtree_array)	
 		self.kdtree = KDTree (self.kdtree_array)
-		result = self.kdtree.query(self.kdtree_array, k=1, return_distance=True)
+		self.update_field()
 
-		self.dist_array = result[0]
-		self.indices_array = result[1]
-		
+
+	def update_field(self):
+		for i in range (self.my_map_height):
+			for j in range (self.my_map_width):
+				value = self.kdtree.query([[i,j]], k=1)
+				new_value = self.calculate (value[0][0])
+				coordinate = self.my_map.cell_position(i,j)
+				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
+
+
+	def calculate (self, distance):
+		constant = 2 * math.pi
+		constant = np.float32(math.sqrt(constant)) * self.laser_sigma_hit
+		constant = np.float32(1.0/constant)
+		power = np.float32(-1 * 
+			((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
+		value = math.pow( math.e, power)
+		value = constant * value
+		return value	
+
 	
 if __name__ == '__main__':
    r = Robot()
