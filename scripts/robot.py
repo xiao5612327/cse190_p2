@@ -104,24 +104,32 @@ class Robot():
 	def make_move(self):
 		i = self.move_made
 		#add noise to x, y, theta when first move
-		
 		move_function(self.move_list[i][0], 0)
 		for j in range(len(self.particle_array)):
-		    self.particle_array[j].theta += self.move_list[i][0]
+			self.particle_array[j].theta += self.move_list[i][0]
 		    
-		    if(i == 0):
-		    	for a in range (self.num_particles):
+		for a in range(self.move_list[i][2]):
+			move_function(0, self.move_list[i][1])
 			#update x, y, theta and pose
+			self.particle_update(i, a)
+			if(i == 0):
+		   		for a in range (self.num_particles):
 			 
-			    update_x = self.particle_array[a].x + self.move_list[i][1] * cos(self.move_[i][0] + self.particle_array[a].theta)
-			    update_y = self.particle_array[a].y + self.move_list[i][1] * sin(self.move_[i][0] + self.particle_array[a].theta)
-				
-			    self.particle_array[a].x = update_x
-			    self.particle_array[a].y = update_y
-			    self.particle_array[a].theta = noise_theta
-			    self.particle_array[a].pose = get_pose(update_x, update_y, update_theta)
-		    move_function(0, self.move_list[i][1])
-					
+			    		self.particle_array[a].x += self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
+			    		self.particle_array[a].y += self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
+			    		self.particle_array[a].theta += self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
+			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
+
+
+
+	def particle_update (self, i, a):
+		update_x = self.particle_array[a].x + self.move_list[i][1] * cos(self.move_[i][0] + self.particle_array[a].theta)
+		update_y = self.particle_array[a].y + self.move_list[i][1] * sin(self.move_[i][0] + self.particle_array[a].theta)
+		self.particle_array[a].x = update_x
+		self.particle_array[a].y = update_y
+		self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
+
+	
 	def add_first_move_noise(self, coordinate, sd):
 		noise = math.ceil(r.gauss(0, sd)*100.)/100.
 		added_noise = coordinate + noise
@@ -158,8 +166,7 @@ class Robot():
 		constant = 2 * math.pi
 		constant = np.float32(math.sqrt(constant)) * self.laser_sigma_hit
 		constant = np.float32(1.0/constant)
-		power = np.float32(-1 * 
-			((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
+		power = np.float32(-1 * ((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
 		value = math.pow( math.e, power)
 		value = constant * value
 		return value	
