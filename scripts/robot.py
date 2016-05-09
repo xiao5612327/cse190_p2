@@ -62,12 +62,27 @@ class Robot():
 			queue_size = 1,
 			latch = True
 		)
+		self.result_update_pub = rospy.Publisher(
+			"/result_update",
+			Bool,
+			queue_size = 1
+		)
+
+		self.sim_complete_pub = rospy.Publisher(
+			"/sim_complete",
+			Bool,
+			queue_size = 1
+		)
 
 		rospy.spin()	
 
 
 	def handle_base_scan_data (self, data):
-		return data
+		
+		for i in range (self.num_particles)
+			
+			for j in range (100)
+				angle = particle	
 
 	def create_particles(self):
 		self.particle_array = []
@@ -135,7 +150,11 @@ class Robot():
 		added_noise = coordinate + noise
 		return added_noise
 
-
+	def add_resample_nosie(self, coordinate, sd):
+		noise = math.ceil(r.gauss(0, sd) * 100.) /100.
+		added_noise = coordinate + noise
+		return added_noise
+	
 	def construct_field(self):
 		self.my_map = Map(self.tmp_map)
 		self.my_map_width = self.my_map.width
