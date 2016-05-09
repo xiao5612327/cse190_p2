@@ -36,6 +36,8 @@ class Robot():
 		self.first_move_sigma_x = self.config['first_move_sigma_x']
 		self.first_move_sigma_y = self.config['first_move_sigma_y']
 		self.first_move_sigma_angle = self.config['first_move_sigma_angle']
+		self.laser_z_hit = self.config['laser_z_hit']
+		self.laser_z_rand = self.config['laser_z_rand']
 		self.move_made = 0
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
@@ -76,14 +78,35 @@ class Robot():
 
 		rospy.spin()	
 
-
 	def handle_base_scan_data (self, data):
-		
-		for i in range (self.num_particles)
-			
-			for j in range (100)
-				angle = particle	
+		self.scan_data = data
 
+	def process_scan_data (self):
+		total = 0
+		for i in range (self.num_particles):
+			pz_array = []
+			for j in range (100):
+				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
+				x = self.particle_array[i].x + self.scan_data.ranges[j] * cos(angle)
+				y = self.particle_array[i].x + self.scan_data.ranges[j] * sin(angle)
+				lp = self.my_map.get_cell( x, y )
+				pz = (self.laser_z_hit * lp) + self.laser_z_rand
+				pz_array.append(pz)
+			
+			p_tot = 0
+			for x in range (len(pz_array)):
+				value_cubed = math.pow(pz_array[x],3)
+				p_tot = p_tot + value_cubed
+
+			self.particle_array[i].weight = self.particle_array[i].weight * p_tot
+			total = total + self.particle_array[i].weight
+
+		# normalize weights
+		for j in range (self.num_particles):
+			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
+			
+				
+				
 	def create_particles(self):
 		self.particle_array = []
 
@@ -106,6 +129,10 @@ class Robot():
 			
 		self.particle_pose_pub.publish(self.pose_array)
 		self.construct_field()
+
+		# publish OccupancyMap
+		grid_mssg = self.my_map.to_message()
+		self.likelihood_pub.publish(grid_mssg)
 
 
 	def handle_map_data(self, data):
@@ -134,7 +161,8 @@ class Robot():
 			    		self.particle_array[a].y += self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
 			    		self.particle_array[a].theta += self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
 			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
-
+			
+			self.process_base_scan_data()	
 
 
 	def particle_update (self, i, a):
