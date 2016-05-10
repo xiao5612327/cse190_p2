@@ -38,6 +38,10 @@ class Robot():
 		self.first_move_sigma_angle = self.config['first_move_sigma_angle']
 		self.laser_z_hit = self.config['laser_z_hit']
 		self.laser_z_rand = self.config['laser_z_rand']
+		self.resample_sigma_x = self.config['resample_sigma_x']
+		self.resample_sigma_y = self.config['resample_sigma_y']
+		self.resample_sigma_theta = self.config['resample_sigma_angle']
+
 		self.move_made = 0
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
@@ -85,7 +89,7 @@ class Robot():
 
 	def process_scan_data (self):
 		total = 0
-		print self.scan_data.angle_min
+		#print self.scan_data.angle_min
 
 		for i in range (self.num_particles):
 			pz_array = []
@@ -121,7 +125,7 @@ class Robot():
 		for i in range (self.num_particles):
 			x = r.random() * self.width
 			y = r.random() * self.height
-			theta = r.random() * 2 * math.pi
+			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
 			particle.x = x
@@ -146,7 +150,11 @@ class Robot():
 		self.width = data.info.width
 		self.height = data.info.height
 		self.create_particles()
-		self.make_move()
+		
+		for i in range (len(self.move_list)):
+			self.make_move()
+			rospy.sleep(1)
+			self.result_update_pub(True)
 
 
 	def make_move(self):
@@ -154,7 +162,7 @@ class Robot():
 		#add noise to x, y, theta when first move
 		move_function(self.move_list[i][0], 0)
 		for j in range(len(self.particle_array)):
-			self.particle_array[j].theta += self.move_list[i][0]
+			self.particle_array[j].theta += math.radians(self.move_list[i][0])
 		    
 		for a in range(self.move_list[i][2]):
 			move_function(0, self.move_list[i][1])
@@ -162,13 +170,58 @@ class Robot():
 			self.particle_update(i, a)
 			if(i == 0):
 		   		for a in range (self.num_particles):
-			 
 			    		self.particle_array[a].x += self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
 			    		self.particle_array[a].y += self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
 			    		self.particle_array[a].theta += self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
 			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
 			
 			self.process_scan_data()	
+			self.resampling_particle()
+			#print "hello world"
+
+
+	def resampling_particle(self):
+		self.the_list = []
+		new_array = []
+		p = 0
+		for i in range (self.num_particles):
+			
+			""" FIX THIS """
+			w = self.particle_array[i].weight * self.num_particles
+
+			for j in range (p):
+				self.the_list.append(i)
+
+		for k in range (self.num_particles):
+			random = r.randint(0, len(self.the_list)-1)
+			
+			new_particle = self.particle_array[random]
+			coordinate = self.my_map.get_cell(new_particle.x, new_particle.y, new_particle.theta)
+			
+			# set weight to 0 if coordinate is out of map
+			if( coordinate == nan )
+				new_particle.weight = 0
+				
+			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
+			new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
+			new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta)
+			new_pose = get_pose(new_x, new_y, new_theta)
+			new_particle.x = new_x
+			new_particle.y = new_y
+			new_particle.theta = new_theta
+			new_particle.pose = new_pose
+			new_array.append(new_particle)
+			
+
+		for m in range (self.num_particles):
+			self.particle_array[m] = new_array[m]
+			self.pose_array[m] = new_array[m].pose
+
+		# publish the pose array
+		rospy.sleep(1)
+		self.particle_pose_pub.publish(self.pose_array)
+
+		
 
 
 	def particle_update (self, i, a):
@@ -184,7 +237,7 @@ class Robot():
 		added_noise = coordinate + noise
 		return added_noise
 
-	def add_resample_nosie(self, coordinate, sd):
+	def add_resample_noise(self, coordinate, sd):
 		noise = math.ceil(r.gauss(0, sd) * 100.) /100.
 		added_noise = coordinate + noise
 		return added_noise
@@ -218,12 +271,13 @@ class Robot():
 
 
 	def calculate (self, distance):
-		constant = 2 * math.pi
+		"""constant = 2 * math.pi
 		constant = np.float32(math.sqrt(constant)) * self.laser_sigma_hit
 		constant = np.float32(1.0/constant)
+		"""
 		power = np.float32(-1 * ((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
 		value = math.pow( math.e, power)
-		value = constant * value
+		#value = constant * value
 		return value	
 
 	
