@@ -39,62 +39,63 @@ class Robot():
 		self.laser_z_hit = self.config['laser_z_hit']
 		self.laser_z_rand = self.config['laser_z_rand']
 		self.move_made = 0
-		self.base_scan_data = rospy.Subscriber(
-			"/base_scan",
-			LaserScan,
-			self.handle_base_scan_data
-		)
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
 			OccupancyGrid, 
 			self.handle_map_data
 		)
 		
+		self.base_scan_data = rospy.Subscriber(
+			"/base_scan",
+			LaserScan,
+			self.handle_base_scan_data
+		)
 
 		self.particle_pose_pub = rospy.Publisher(
-			'/particlecloud',
+			"/particlecloud",
 			PoseArray,
 			queue_size = 1,
 			latch = True
 		)
 		
 		self.likelihood_pub = rospy.Publisher(
-			'/likelihood_field',
+			"/likelihood_field",
 			OccupancyGrid,
 			queue_size = 1,
 			latch = True
 		)
+
 		self.result_update_pub = rospy.Publisher(
-			'/result_update',
+			"/result_update",
 			Bool,
 			queue_size = 1
 		)
 
 		self.sim_complete_pub = rospy.Publisher(
-			'/sim_complete',
+			"/sim_complete",
 			Bool,
 			queue_size = 1
 		)
-		self.scan_data = LaserScan()
 
 		rospy.spin()	
+
 
 	def handle_base_scan_data (self, data):
 		self.scan_data = data
 
 	def process_scan_data (self):
 		total = 0
+		print self.scan_data.angle_min
+
 		for i in range (self.num_particles):
 			pz_array = []
-			print self.scan_data.range_max
 			for j in range (100):
-				if self.scan_data.range_min < self.scan_data.ranges[1] and self.scan_data.range_max > self.scan_data.ranges[1]:
-					angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
-					x = self.particle_array[i].x + self.scan_data.ranges[1] * cos(angle)
-					y = self.particle_array[i].y + self.scan_data.ranges[1] * sin(angle)
-					lp = self.my_map.get_cell( x, y )
-					pz = (self.laser_z_hit * lp) + self.laser_z_rand
-					pz_array.append(pz)
+				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
+				x = self.particle_array[i].x + self.scan_data.ranges[j] * cos(angle)
+				y = self.particle_array[i].x + self.scan_data.ranges[j] * sin(angle)
+				lp = self.my_map.get_cell( x, y )
+				pz = (self.laser_z_hit * lp) + self.laser_z_rand
+				pz_array.append(pz)
 			
 			p_tot = 0
 			for x in range (len(pz_array)):
@@ -130,7 +131,7 @@ class Robot():
 			self.particle_array.append(particle)
 			self.pose_array.poses.append(pose)
 		
-		rospy.sleep(1)		
+		rospy.sleep(1)	
 		self.particle_pose_pub.publish(self.pose_array)
 		self.construct_field()
 
@@ -145,18 +146,7 @@ class Robot():
 		self.width = data.info.width
 		self.height = data.info.height
 		self.create_particles()
-		#for loop loop though all move_list()
-		for i in range (len(self.move_list)):
-			self.make_move()
-			#publish result each move made
-			rospy.sleep(1)
-			self.result_update_pub(True)
-
-		rospy.sleep(1)
-		self.sim_complete_pub(True)
-		rospy.sleep(1)
-		rospy.signal_shutdown(Robot)
-		
+		self.make_move()
 
 
 	def make_move(self):
@@ -179,29 +169,7 @@ class Robot():
 			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
 			
 			self.process_scan_data()	
-			self.resampling_particle()
-		#publish new particle cloud after resample
-		self.move_made += 1
-		
-		
 
-	def resampling_particle(self):
-		#loop though the particle array to add noise
-		for i in range (self.num_particles):
-			added_noise_x = self.add_resample_noise(self.particle_array[i].x, self.config['resample_sigma_x'])
-			added_noise_y = self.add_resample_noise(self.particle_array[i].y, self.config['resample_sigma_y'])
-			added_noise_theta = self.add_resample_noise(self.particle_array[i].theta, self.config['resample_sigma_angle'])
-			#update x, y, and theta
-			self.particle_array[i].x = added_noise_x
-			self.particle_array[i].y = added_noise_y
-			self.particle_array[i].theta += added_noise_theta
-			#update pose and weight
-			self.particle_array[i].pose = get_pose(added_noise_x, added_noise_y, self.particle_array[i].theta)
-			self.particle_array[i].weight = self.num_particles * self.particle_array[i].weight
-	
-			#publish pose
-			rospy.sleep(1)
-			self.particle_pose_pub.publish(self.particle_array[i].pose)
 
 	def particle_update (self, i, a):
 		update_x = self.particle_array[a].x + self.move_list[i][1] * cos(self.move_list[i][0] + self.particle_array[a].theta)
@@ -232,7 +200,7 @@ class Robot():
 				coordinate = self.my_map.cell_position(i,j)
 			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
 				if( value == 1.0 ):
-					self.kdtree_array.append([i,j])	
+					self.kdtree_array.append([coordinate[0], coordinate[1]])	
 
 		self.kdtree = KDTree (self.kdtree_array)
 		self.update_field()
@@ -241,10 +209,12 @@ class Robot():
 	def update_field(self):
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
-				value = self.kdtree.query([[i,j]], k=1)
+				coordinate = self.my_map.cell_position(i,j)
+				value = self.kdtree.query([[coordinate[0],coordinate[1]]], k=1)
 				new_value = self.calculate (value[0][0])
 				coordinate = self.my_map.cell_position(i,j)
-				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
+				if( self.my_map.get_cell(coordinate[0], coordinate[1]) == 0.0):
+					self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
 
 
 	def calculate (self, distance):
