@@ -126,8 +126,13 @@ class Robot():
 		self.pose_array.header.frame_id = 'map'
 		self.pose_array.poses = []
 		for i in range (self.num_particles):
-			x = r.random() * self.width
-			y = r.random() * self.height
+			x = r.randint(0, self.heigh-1)
+			y = r.randint(0, self.width-1)
+		        x, y = cell_position(x, y)
+
+			#x = r.random() * self.width
+			#y = r.random() * self.height
+
 			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
@@ -184,12 +189,11 @@ class Robot():
 
 
 	def resampling_particle(self):
+#		random = r.random()
 		self.the_list = []
 		new_array = []
 		ddd = 0
 		for i in range (self.num_particles):
-			
-			""" FIX THIS """
 			count = 0
 			w = self.particle_array[i].weight * self.num_particles
 			while (count < w):
