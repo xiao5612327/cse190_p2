@@ -81,16 +81,19 @@ class Robot():
 			queue_size = 1
 		)
 
+		self.scan_data_avai = 0
 		rospy.spin()	
 
 
 	def handle_base_scan_data (self, data):
 		self.scan_data = data
+		self.scan_data_avai = 1
 
 	def process_scan_data (self):
 		total = 0
-		#print self.scan_data.angle_min
-
+		while( self.scan_data_avai == 0 ):
+			rospy.sleep(1)
+		print "process"
 		for i in range (self.num_particles):
 			pz_array = []
 			for j in range (100):
@@ -108,11 +111,14 @@ class Robot():
 					continue
 				else:	
 					p_tot = p_tot + value_cubed
-			self.particle_array[i].weight = self.particle_array[i].weight * p_tot
+
+			#self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
 			# set weight to 0 if particle goes outside of map
-			"""if (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
-				self.particle_array[i].weight = 0"""
+			if (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
+				self.particle_array[i].weight = self.particle_array[i].weight
+			else:
+				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
 			total = total + self.particle_array[i].weight
 
@@ -192,6 +198,7 @@ class Robot():
 		totalWeight = 0	
 		new_array = []
 		counter = 0
+		time = 0
 		while (counter < self.num_particles):
 			random = r.random()
 			for i in range (self.num_particles):
@@ -210,14 +217,22 @@ class Robot():
 					new_particle.theta = new_theta
 					new_particle.pose = new_pose
 					new_array.append(new_particle)
+					time = time + 1
 					totalWeight = 0
 					break
 			
 			counter = counter + 1
-			
+		
+		print time	
+		total = 0
 		for m in range (self.num_particles):
 			self.particle_array[m] = new_array[m]
 			self.pose_array.poses[m] = new_array[m].pose
+			total = total + self.particle_array[m].weight
+
+		# normalize weights
+		for j in range (self.num_particles):
+			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
 				
 		# publish the pose array
 		rospy.sleep(1)
