@@ -109,12 +109,16 @@ class Robot():
 				else:	
 					p_tot = p_tot + value_cubed
 			self.particle_array[i].weight = self.particle_array[i].weight * p_tot
+
+			# set weight to 0 if particle goes outside of map
+			"""if (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
+				self.particle_array[i].weight = 0"""
+
 			total = total + self.particle_array[i].weight
 
 		# normalize weights
 		for j in range (self.num_particles):
 			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
-		total = 0
 			
 				
 				
@@ -126,13 +130,9 @@ class Robot():
 		self.pose_array.header.frame_id = 'map'
 		self.pose_array.poses = []
 		for i in range (self.num_particles):
-			x = r.randint(0, self.heigh-1)
-			y = r.randint(0, self.width-1)
-		        x, y = cell_position(x, y)
-
-			#x = r.random() * self.width
-			#y = r.random() * self.height
-
+			# x and y are coordinates
+			x = r.random() * self.width
+			y = r.random() * self.height
 			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
@@ -189,7 +189,41 @@ class Robot():
 
 
 	def resampling_particle(self):
-#		random = r.random()
+		totalWeight = 0	
+		new_array = []
+		counter = 0
+		while (counter < self.num_particles):
+			random = r.random()
+			for i in range (self.num_particles):
+				weight = self.particle_array[i].weight
+				totalWeight = totalWeight + weight
+				if (random > totalWeight):
+					continue
+				else:
+					new_particle = self.particle_array[i]
+					new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
+					new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
+					new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta)
+					new_pose = get_pose(new_x, new_y, new_theta)
+					new_particle.x = new_x
+					new_particle.y = new_y
+					new_particle.theta = new_theta
+					new_particle.pose = new_pose
+					new_array.append(new_particle)
+					totalWeight = 0
+					break
+			
+			counter = counter + 1
+			
+		for m in range (self.num_particles):
+			self.particle_array[m] = new_array[m]
+			self.pose_array.poses[m] = new_array[m].pose
+				
+		# publish the pose array
+		rospy.sleep(1)
+		self.particle_pose_pub.publish(self.pose_array)
+
+		"""
 		self.the_list = []
 		new_array = []
 		ddd = 0
@@ -229,6 +263,7 @@ class Robot():
 		# publish the pose array
 		rospy.sleep(1)
 		self.particle_pose_pub.publish(self.pose_array)
+		"""
 
 	def particle_update (self, i, a):
 		#angle problem
