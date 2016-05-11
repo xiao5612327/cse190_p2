@@ -21,7 +21,7 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = np.float32(1/800)
+		self.weight = np.float32(1.0/800.0)
 
 class Robot():
 	def __init__(self):
@@ -96,22 +96,25 @@ class Robot():
 			for j in range (100):
 				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * cos(angle)
-				y = self.particle_array[i].x + self.scan_data.ranges[j] * sin(angle)
+				y = self.particle_array[i].y + self.scan_data.ranges[j] * sin(angle)
 				lp = self.my_map.get_cell( x, y )
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
 			
 			p_tot = 0
-			for x in range (len(pz_array)):
-				value_cubed = math.pow(pz_array[x],3)
-				p_tot = p_tot + value_cubed
-
+			for a in range (len(pz_array)):
+				value_cubed = math.pow(pz_array[a],3)
+				if(np.isnan(value_cubed)):
+					continue
+				else:	
+					p_tot = p_tot + value_cubed
 			self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 			total = total + self.particle_array[i].weight
 
 		# normalize weights
 		for j in range (self.num_particles):
 			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
+		total = 0
 			
 				
 				
@@ -155,6 +158,7 @@ class Robot():
 			self.make_move()
 			rospy.sleep(1)
 			self.result_update_pub(True)
+			self.move_made = self.move_made + 1
 
 
 	def make_move(self):
@@ -177,30 +181,28 @@ class Robot():
 			
 			self.process_scan_data()	
 			self.resampling_particle()
-			#print "hello world"
 
 
 	def resampling_particle(self):
 		self.the_list = []
 		new_array = []
-		p = 0
 		for i in range (self.num_particles):
 			
 			""" FIX THIS """
+			count = 0
 			w = self.particle_array[i].weight * self.num_particles
-
-			for j in range (p):
+			while (count < w):
 				self.the_list.append(i)
+				count = count + 1
 
 		for k in range (self.num_particles):
 			random = r.randint(0, len(self.the_list)-1)
-			
-			new_particle = self.particle_array[random]
-			coordinate = self.my_map.get_cell(new_particle.x, new_particle.y, new_particle.theta)
+		
+			list_index = self.the_list[random]
+		
+			new_particle = self.particle_array[list_index]
 			
 			# set weight to 0 if coordinate is out of map
-			if( coordinate == nan )
-				new_particle.weight = 0
 				
 			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
 			new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
@@ -212,21 +214,18 @@ class Robot():
 			new_particle.pose = new_pose
 			new_array.append(new_particle)
 			
-
 		for m in range (self.num_particles):
 			self.particle_array[m] = new_array[m]
-			self.pose_array[m] = new_array[m].pose
+			self.pose_array.poses[m] = new_array[m].pose
 
 		# publish the pose array
 		rospy.sleep(1)
 		self.particle_pose_pub.publish(self.pose_array)
 
-		
-
-
 	def particle_update (self, i, a):
-		update_x = self.particle_array[a].x + self.move_list[i][1] * cos(self.move_list[i][0] + self.particle_array[a].theta)
-		update_y = self.particle_array[a].y + self.move_list[i][1] * sin(self.move_list[i][0] + self.particle_array[a].theta)
+		#angle problem
+		update_x = self.particle_array[a].x + self.move_list[i][1] * cos(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
+		update_y = self.particle_array[a].y + self.move_list[i][1] * sin(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
 		self.particle_array[a].x = update_x
 		self.particle_array[a].y = update_y
 		self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
