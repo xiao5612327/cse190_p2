@@ -95,8 +95,8 @@ class Robot():
 			pz_array = []
 			for j in range (100):
 				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
-				x = self.particle_array[i].x + self.scan_data.ranges[j] * cos(angle)
-				y = self.particle_array[i].y + self.scan_data.ranges[j] * sin(angle)
+				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
+				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
 				lp = self.my_map.get_cell( x, y )
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
@@ -186,6 +186,7 @@ class Robot():
 	def resampling_particle(self):
 		self.the_list = []
 		new_array = []
+		ddd = 0
 		for i in range (self.num_particles):
 			
 			""" FIX THIS """
@@ -194,6 +195,7 @@ class Robot():
 			while (count < w):
 				self.the_list.append(i)
 				count = count + 1
+				ddd = ddd +1
 
 		for k in range (self.num_particles):
 			random = r.randint(0, len(self.the_list)-1)
@@ -201,7 +203,7 @@ class Robot():
 			list_index = self.the_list[random]
 		
 			new_particle = self.particle_array[list_index]
-			
+					
 			# set weight to 0 if coordinate is out of map
 				
 			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
@@ -218,14 +220,16 @@ class Robot():
 			self.particle_array[m] = new_array[m]
 			self.pose_array.poses[m] = new_array[m].pose
 
+		self.the_list = []
+		new_array = []
 		# publish the pose array
 		rospy.sleep(1)
 		self.particle_pose_pub.publish(self.pose_array)
 
 	def particle_update (self, i, a):
 		#angle problem
-		update_x = self.particle_array[a].x + self.move_list[i][1] * cos(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
-		update_y = self.particle_array[a].y + self.move_list[i][1] * sin(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
+		update_x = self.particle_array[a].x + self.move_list[i][1] * np.cos(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
+		update_y = self.particle_array[a].y + self.move_list[i][1] * np.sin(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
 		self.particle_array[a].x = update_x
 		self.particle_array[a].y = update_y
 		self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
