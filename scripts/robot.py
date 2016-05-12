@@ -101,6 +101,8 @@ class Robot():
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
 				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
 				lp = self.my_map.get_cell( x, y )
+				#if (np.isnan(lp))
+					
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
 			
@@ -188,7 +190,7 @@ class Robot():
 			    		self.particle_array[a].x += self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
 			    		self.particle_array[a].y += self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
 			    		self.particle_array[a].theta += self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
-			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
+			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta % (math.radians(360)))
 			
 			self.process_scan_data()	
 			self.resampling_particle()
