@@ -236,7 +236,8 @@ class Robot():
 			self.particle_array[m] = new_array[m]
 			self.pose_array.poses[m] = new_array[m].pose
 			total = total + self.particle_array[m].weight
-
+		
+		total = 0
 		# normalize weights
 		for j in range (self.num_particles):
 			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
@@ -289,8 +290,8 @@ class Robot():
 
 	def particle_update (self, i, a):
 		#angle problem
-		update_x = self.particle_array[a].x + self.move_list[i][1] * np.cos(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
-		update_y = self.particle_array[a].y + self.move_list[i][1] * np.sin(math.radians(self.move_list[i][0]) + self.particle_array[a].theta)
+		update_x = self.particle_array[a].x + self.move_list[i][1] * np.cos(self.particle_array[a].theta)
+		update_y = self.particle_array[a].y + self.move_list[i][1] * np.sin(self.particle_array[a].theta)
 		self.particle_array[a].x = update_x
 		self.particle_array[a].y = update_y
 		self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
