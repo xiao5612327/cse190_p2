@@ -192,9 +192,9 @@ class Robot():
 			self.particle_update(i, a)
 			if(i == 0):
 		   		for a in range (self.num_particles):
-			    		self.particle_array[a].x += self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
-			    		self.particle_array[a].y += self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
-			    		self.particle_array[a].theta += self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
+			    		self.particle_array[a].x = self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
+			    		self.particle_array[a].y = self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
+			    		self.particle_array[a].theta = self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
 			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta % (math.radians(360)))
 			
 			self.process_scan_data()	
