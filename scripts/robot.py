@@ -58,8 +58,8 @@ class Robot():
 		self.particle_pose_pub = rospy.Publisher(
 			"/particlecloud",
 			PoseArray,
-			queue_size = 1,
-			latch = True
+			queue_size = 10
+			#latch = True
 		)
 		
 		self.likelihood_pub = rospy.Publisher(
@@ -72,13 +72,13 @@ class Robot():
 		self.result_update_pub = rospy.Publisher(
 			"/result_update",
 			Bool,
-			queue_size = 1
+			queue_size = 10
 		)
 
 		self.sim_complete_pub = rospy.Publisher(
 			"/sim_complete",
 			Bool,
-			queue_size = 1
+			queue_size = 10
 		)
 
 		self.scan_data_avai = 0
@@ -94,15 +94,17 @@ class Robot():
 		while( self.scan_data_avai == 0 ):
 			rospy.sleep(1)
 		print "process"
+		self.scan_data_avai = 0
 		for i in range (self.num_particles):
 			pz_array = []
 			for j in range (100):
 				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
 				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
-				lp = self.my_map.get_cell( x, y )
-				#if (np.isnan(lp))
-					
+				if( np.isnan(x) or np.isnan(y) or np.isinf(x) or np.isinf(y) ):
+					lp = 0
+				else:
+					lp = self.my_map.get_cell( x, y )
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
 			
@@ -117,7 +119,9 @@ class Robot():
 			#self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
 			# set weight to 0 if particle goes outside of map
-			if (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
+			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
+				self.particle_array[i].weight = self.particle_array[i].weight
+			elif (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
 				self.particle_array[i].weight = self.particle_array[i].weight
 			else:
 				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
@@ -166,11 +170,12 @@ class Robot():
 		self.width = data.info.width
 		self.height = data.info.height
 		self.create_particles()
-		
-		for i in range (len(self.move_list)):
+		self.num_moves = len(self.move_list)	
+		for i in range (self.num_moves):
+			print "make_move"
 			self.make_move()
 			rospy.sleep(1)
-			self.result_update_pub(True)
+			self.result_update_pub.publish(True)
 			self.move_made = self.move_made + 1
 
 
@@ -200,7 +205,6 @@ class Robot():
 		totalWeight = 0	
 		new_array = []
 		counter = 0
-		time = 0
 		while (counter < self.num_particles):
 			random = r.random()
 			for i in range (self.num_particles):
@@ -212,20 +216,21 @@ class Robot():
 					new_particle = self.particle_array[i]
 					new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
 					new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
-					new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta)
+					"""if(np.isnan(self.my_map.get_cell(new_x, new_y))):
+						counter = counter - 1
+						break"""
+					new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta) % math.radians(360)
 					new_pose = get_pose(new_x, new_y, new_theta)
 					new_particle.x = new_x
 					new_particle.y = new_y
 					new_particle.theta = new_theta
 					new_particle.pose = new_pose
 					new_array.append(new_particle)
-					time = time + 1
 					totalWeight = 0
 					break
 			
 			counter = counter + 1
 		
-		print time	
 		total = 0
 		for m in range (self.num_particles):
 			self.particle_array[m] = new_array[m]
