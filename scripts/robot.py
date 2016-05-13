@@ -29,10 +29,8 @@ class Robot():
 		self.config = read_config()
 		self.num_particles = self.config['num_particles']
 		self.laser_sigma_hit = self.config['laser_sigma_hit']
-		#get move list and set move list length
 		self.move_list = self.config['move_list']
 		self.move_list_length = len(self.move_list)
-		#get first move segima x, y, and theta
 		self.first_move_sigma_x = self.config['first_move_sigma_x']
 		self.first_move_sigma_y = self.config['first_move_sigma_y']
 		self.first_move_sigma_angle = self.config['first_move_sigma_angle']
@@ -59,7 +57,6 @@ class Robot():
 			"/particlecloud",
 			PoseArray,
 			queue_size = 10
-			#latch = True
 		)
 		
 		self.likelihood_pub = rospy.Publisher(
@@ -82,29 +79,51 @@ class Robot():
 		)
 
 		self.scan_data_avai = 0
-		rospy.spin()	
+		self.handle_map_data_called = 0
+		#rospy.spin()	
+		while (True):
+			if ( self.handle_map_data_called == 1):
+				self.create_particles()
+				self.construct_field()
+
+				# publish OccupancyMap
+				grid_mssg = self.my_map.to_message()
+				rospy.sleep(1)
+				self.likelihood_pub.publish(grid_mssg)
+
+				self.make_all_moves()
+				break
+		
+		rospy.sleep(1)
+		self.sim_complete_pub.publish(True)
+		rospy.sleep(1)
+		rospy.signal_shutdown(Robot)
 
 
 	def handle_base_scan_data (self, data):
 		self.scan_data = data
 		self.scan_data_avai = 1
 
+
 	def process_scan_data (self):
 		total = 0
 		while( self.scan_data_avai == 0 ):
 			rospy.sleep(1)
-		print "process"
+		print "process data"
 		self.scan_data_avai = 0
 		for i in range (self.num_particles):
 			pz_array = []
 			for j in range (100):
-				angle = self.particle_array[i].theta + self.scan_data.angle_min + self.scan_data.angle_increment * j
+				angle = self.particle_array[i].theta + self.scan_data.angle_min + (self.scan_data.angle_increment * j)
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
 				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
+				
+				### double check with TA!!!!!
 				if( np.isnan(x) or np.isnan(y) or np.isinf(x) or np.isinf(y) ):
 					lp = 0
 				else:
 					lp = self.my_map.get_cell( x, y )
+
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
 			
@@ -118,11 +137,11 @@ class Robot():
 
 			#self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
-			# set weight to 0 if particle goes outside of map
+			# set weight to itself if particle goes outside of map
 			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
-				self.particle_array[i].weight = self.particle_array[i].weight
+				self.particle_array[i].weight = 0.0
 			elif (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
-				self.particle_array[i].weight = self.particle_array[i].weight
+				self.particle_array[i].weight = 0.0
 			else:
 				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
@@ -135,16 +154,18 @@ class Robot():
 				
 				
 	def create_particles(self):
+		while (self.handle_map_data_called == 0):
+			rospy.sleep(1)
 		self.particle_array = []
-
 		self.pose_array = PoseArray()		
 		self.pose_array.header.stamp = rospy.Time.now()
 		self.pose_array.header.frame_id = 'map'
 		self.pose_array.poses = []
 		for i in range (self.num_particles):
 			# x and y are coordinates
-			x = r.random() * self.width
-			y = r.random() * self.height
+			x = r.random() * self.my_map_width
+			y = r.random() * self.my_map_height
+			x, y = self.my_map.cell_position (x,y)
 			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
@@ -157,19 +178,25 @@ class Robot():
 		
 		rospy.sleep(1)	
 		self.particle_pose_pub.publish(self.pose_array)
-		self.construct_field()
-
-		# publish OccupancyMap
-		grid_mssg = self.my_map.to_message()
-		rospy.sleep(1)
-		self.likelihood_pub.publish(grid_mssg)
 
 
 	def handle_map_data(self, data):
 		self.tmp_map = data
-		self.width = data.info.width
-		self.height = data.info.height
-		self.create_particles()
+		self.my_map = Map(self.tmp_map)
+		self.my_map_width = self.my_map.width
+		self.my_map_height = self.my_map.height
+		self.handle_map_data_called = 1
+		
+		"""self.create_particles()
+		self.num_moves = len(self.move_list)	
+		for i in range (self.num_moves):
+			print "make_move"
+			self.make_move()
+			rospy.sleep(1)
+			self.result_update_pub.publish(True)
+			self.move_made = self.move_made + 1
+		"""
+	def make_all_moves(self):
 		self.num_moves = len(self.move_list)	
 		for i in range (self.num_moves):
 			print "make_move"
@@ -189,14 +216,10 @@ class Robot():
 		for a in range(self.move_list[i][2]):
 			move_function(0, self.move_list[i][1])
 			#update x, y, theta and pose
-			self.particle_update(i, a)
+			self.particle_update(i)
 			if(i == 0):
-		   		for a in range (self.num_particles):
-			    		self.particle_array[a].x = self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
-			    		self.particle_array[a].y = self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
-			    		self.particle_array[a].theta = self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
-			    		self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta % (math.radians(360)))
-			
+				self.particle_add_noise_first_move()
+
 			self.process_scan_data()	
 			self.resampling_particle()
 
@@ -237,7 +260,6 @@ class Robot():
 			self.pose_array.poses[m] = new_array[m].pose
 			total = total + self.particle_array[m].weight
 		
-		total = 0
 		# normalize weights
 		for j in range (self.num_particles):
 			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
@@ -288,13 +310,23 @@ class Robot():
 		self.particle_pose_pub.publish(self.pose_array)
 		"""
 
-	def particle_update (self, i, a):
-		#angle problem
-		update_x = self.particle_array[a].x + self.move_list[i][1] * np.cos(self.particle_array[a].theta)
-		update_y = self.particle_array[a].y + self.move_list[i][1] * np.sin(self.particle_array[a].theta)
-		self.particle_array[a].x = update_x
-		self.particle_array[a].y = update_y
-		self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
+
+	def particle_update (self, i):
+		for a in range (self.num_particles):
+			update_x = self.particle_array[a].x + self.move_list[i][1] * np.cos(self.particle_array[a].theta)
+			update_y = self.particle_array[a].y + self.move_list[i][1] * np.sin(self.particle_array[a].theta)
+			self.particle_array[a].x = update_x
+			self.particle_array[a].y = update_y
+			self.particle_array[a].pose = get_pose(update_x, update_y, self.particle_array[a].theta)
+
+
+	def particle_add_noise_first_move(self):
+		for a in range (self.num_particles):
+			self.particle_array[a].x = self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
+			self.particle_array[a].y = self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
+			self.particle_array[a].theta = self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
+			self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta % (math.radians(360)))
+			
 
 	
 	def add_first_move_noise(self, coordinate, sd):
@@ -308,15 +340,15 @@ class Robot():
 		return added_noise
 	
 	def construct_field(self):
-		self.my_map = Map(self.tmp_map)
-		self.my_map_width = self.my_map.width
-		self.my_map_height = self.my_map.height
-		array = self.my_map.grid	
 		self.kdtree_array = []
+		#self.query_array = []
+		#self.grid_array= []
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
+				#self.query_array.append(coordinate)
 			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
+				#self.grid_array.append(i,j)
 				if( value == 1.0 ):
 					self.kdtree_array.append([coordinate[0], coordinate[1]])	
 
@@ -325,6 +357,14 @@ class Robot():
 
 
 	def update_field(self):
+		"""value = self.kdtree.query(self.query_array, k=1)
+		for i in range (len(self.dist_array)):
+			new_value = self.calculate (value[0][i])
+			r, c = self.grid_array[i]
+			coordinate = self.my_map.cell_position(r,c)
+			if( self.my_map.get_cell(coordinate[0], coordinate[1]) == 0.0):
+				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
+		"""	
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
