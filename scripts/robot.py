@@ -106,7 +106,7 @@ class Robot():
 
 
 	def handle_base_scan_data (self, data):
-		self.scan_data = data
+		self.scan_info = data
 		self.scan_data_avai = 1
 
 
@@ -115,6 +115,7 @@ class Robot():
 			rospy.sleep(1)
 		print "process data"
 		self.scan_data_avai = 0
+		self.scan_data = self.scan_info
 		for i in range (self.num_particles):
 			pz_array = []
 			for j in range (100):
@@ -126,7 +127,6 @@ class Robot():
 					lp = 0
 				else:
 					lp = self.my_map.get_cell( x, y )
-
 				if( np.isnan(lp) ):
 					lp = 0
 
@@ -146,6 +146,8 @@ class Robot():
 			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
 				self.particle_array[i].weight = self.particle_array[i].weight
 			elif (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
+				self.particle_array[i].weight = 0
+			elif (self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y) == 1.0):
 				self.particle_array[i].weight = 0
 			else:
 				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
@@ -186,15 +188,7 @@ class Robot():
 			self.handle_map_first_called = 0
 			print "handle map is called"	
 		
-		"""self.create_particles()
-		self.num_moves = len(self.move_list)	
-		for i in range (self.num_moves):
-			print "make_move"
-			self.make_move()
-			rospy.sleep(1)
-			self.result_update_pub.publish(True)
-			self.move_made = self.move_made + 1
-		"""
+
 	def make_all_moves(self):
 		self.num_moves = len(self.move_list)	
 		for i in range (self.num_moves):
@@ -225,18 +219,25 @@ class Robot():
 	
 	def normalize_weight(self):
 		total = 0
-		weight_list = [x.weight for x in self.particle_array]
-		total = sum(weight_list)
-
-		for j in range (self.num_particles):
-			self.particle_array[j].weight /= total
-
-		total = 0
+		#weight_list = [x.weight for x in self.particle_array]
+		#total = sum(weight_list)
 		for k in range (self.num_particles):
 			total += self.particle_array[k].weight
 
-		print "sum should be 1: ", total
-		weight_list = [x.weight for x in self.particle_array]
+		for j in range (self.num_particles):
+			self.particle_array[j].weight /= total
+		
+
+		total = 0
+		for m in range (self.num_particles):
+			total += self.particle_array[m].weight
+		print "total should be 1: ", total
+
+		"""total = 0
+		for k in range (self.num_particles):
+			total += self.particle_array[k].weight
+
+		weight_list = [x.weight for x in self.particle_array]"""
 			
 
 	def resampling_particle(self):
@@ -362,7 +363,6 @@ class Robot():
 
 
 	def calculate (self, distance):
-		print distance
 		power = (-1.0 * ((distance*distance)/(2.0*self.laser_sigma_hit*self.laser_sigma_hit)))
 		value = math.pow( math.e, power)
 		return value	
