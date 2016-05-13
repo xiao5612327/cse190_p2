@@ -27,6 +27,7 @@ class Robot():
 	def __init__(self):
 		rospy.init_node("robot")
 		self.config = read_config()
+		#r.seed(self.config['seed'])
 		self.num_particles = self.config['num_particles']
 		self.laser_sigma_hit = self.config['laser_sigma_hit']
 		self.move_list = self.config['move_list']
@@ -87,10 +88,10 @@ class Robot():
 	def sensor_loop(self):
 		while not rospy.is_shutdown():
 			if ( self.handle_map_first_called == 0):
-				print "went in while(true) loop"
+				#print "went in while(true) loop"
 				self.create_particles()
 				self.construct_field()
-				print "finished construct field"
+				#print "finished construct field"
 				# publish OccupancyMap
 				grid_mssg = self.my_map.to_message()
 				rospy.sleep(1)
@@ -112,27 +113,39 @@ class Robot():
 
 	def process_scan_data (self):
 		while( self.scan_data_avai == 0 ):
-			rospy.sleep(1)
-		print "process data"
-		self.scan_data_avai = 0
+			rospy.sleep(0.1)
+		#print "process data"
+		#self.scan_data_avai = 0
 		self.scan_data = self.scan_info
+
 		for i in range (self.num_particles):
+			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
+				continue
+			cell_prob1 = self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y)
+			cell_prob2 = self.true_map.get_cell(self.particle_array[i].x, self.particle_array[i].y)
+			if (np.isnan(cell_prob1) or cell_prob2 == 1.0):
+				self.particle_array[i].weight = 0.0
+				continue
+
 			pz_array = []
 			for j in range (10):
-				angle = self.particle_array[i].theta + self.scan_data.angle_min + (self.scan_data.angle_increment * j)
-				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
-				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
+				angle = self.particle_array[i].theta + (self.scan_data.angle_min + (self.scan_data.angle_increment * j))
+				x = self.particle_array[i].x + (self.scan_data.ranges[j] * np.cos(angle))
+				y = self.particle_array[i].y + (self.scan_data.ranges[j] * np.sin(angle))
 				
 				if( np.isnan(x) or np.isnan(y) or np.isinf(x) or np.isinf(y) ):
 					#lp = 0
 					pz = 0
 				else:
 					lp = self.my_map.get_cell( x, y )
-					pz = (self.laser_z_hit * lp) + self.laser_z_rand
+					if( np.isnan(lp) ):
+						pz = 0
+					else:
+						pz = (self.laser_z_hit * lp) + self.laser_z_rand
 
-				if( np.isnan(lp) ):
-					#lp = 0
-					pz = 0
+				# if( np.isnan(lp) ):
+				# 	#lp = 0
+				# 	pz = 0
 
 				#pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
@@ -145,16 +158,8 @@ class Robot():
 				else:	
 					p_tot = p_tot + value_cubed
 
-
-			# set weight to itself if particle goes outside of map
-			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
-				self.particle_array[i].weight = self.particle_array[i].weight
-			elif (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
-				self.particle_array[i].weight = 0
-			elif (self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y) == 1.0):
-				self.particle_array[i].weight = 0
-			else:
-				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
+			#sigmoid function for calculating weight
+			self.particle_array[i].weight = self.particle_array[i].weight * (1.0/(1.0+math.pow(math.e, -1*p_tot)))
 
 		self.normalize_weight()	
 				
@@ -167,9 +172,9 @@ class Robot():
 		self.pose_array.poses = []
 		for i in range (self.num_particles):
 			# x and y are coordinates
-			y = r.random() * self.my_map_width
-			x = r.random() * self.my_map_height
-			x, y = self.my_map.cell_position (x,y)
+			col = r.randint(0, self.my_map_width)
+			row = r.randint(0, self.my_map_height)
+			x, y = self.my_map.cell_position (row,col)
 			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
 			particle = Particle()
@@ -188,16 +193,17 @@ class Robot():
 	def handle_map_data(self, data):
 		if( self.handle_map_first_called == 1 ):
 			self.my_map = Map(data)
+			self.true_map = Map(data)
 			self.my_map_width = self.my_map.width
 			self.my_map_height = self.my_map.height
 			self.handle_map_first_called = 0
-			print "handle map is called"	
+			#print "handle map is called"	
 		
 
 	def make_all_moves(self):
 		self.num_moves = len(self.move_list)	
 		for i in range (self.num_moves):
-			print "make_move"
+			#print "make_move"
 			self.make_move()
 			rospy.sleep(1)
 			self.result_update_pub.publish(True)
@@ -210,10 +216,10 @@ class Robot():
 		move_function(self.move_list[i][0], 0)
 		for j in range(len(self.particle_array)):
 			self.particle_array[j].theta += math.radians(self.move_list[i][0])
+			self.particle_array[i].theta = self.particle_array[i].theta % (math.radians(360))
 		    
 		for a in range(self.move_list[i][2]):
 			move_function(0, self.move_list[i][1])
-			#update x, y, theta and pose
 			self.particle_update(i)
 			if(i == 0):
 				self.particle_add_noise_first_move()
@@ -235,12 +241,12 @@ class Robot():
 		total = 0
 		for m in range (self.num_particles):
 			total += self.particle_array[m].weight
-		print "total should be 1: ", total
+		#print "total should be 1: ", total
 
 
 	def resampling_particle(self):
 
-		print "resampling"
+		#print "resampling"
 		self.weight_array = []
 		new_array = []
 		for i in range (self.num_particles):
@@ -288,17 +294,18 @@ class Robot():
 			self.particle_array[a].x = self.add_first_move_noise(self.particle_array[a].x, self.first_move_sigma_x)
 			self.particle_array[a].y = self.add_first_move_noise(self.particle_array[a].y, self.first_move_sigma_y)
 			self.particle_array[a].theta = self.add_first_move_noise(self.particle_array[a].theta, self.first_move_sigma_angle)
-			self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta % (math.radians(360)))
+			self.particle_array[a].pose = get_pose(self.particle_array[a].x, self.particle_array[a].y, self.particle_array[a].theta)
 			
-
 	
 	def add_first_move_noise(self, coordinate, sd):
-		noise = math.ceil(r.gauss(0, sd)*100.)/100.
+		# noise = r.gauss(0, sd)*100.)/100.
+		noise = r.gauss(0, sd)
 		added_noise = coordinate + noise
 		return added_noise
 
 	def add_resample_noise(self, coordinate, sd):
-		noise = math.ceil(r.gauss(0, sd) * 100.) /100.
+		# noise = math.ceil(r.gauss(0, sd) * 100.) /100.
+		noise = r.gauss(0, sd)
 		added_noise = coordinate + noise
 		return added_noise
 	
