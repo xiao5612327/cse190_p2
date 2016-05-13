@@ -21,7 +21,7 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = (1.0/800.0)
+		self.weight = 0.0
 
 class Robot():
 	def __init__(self):
@@ -118,19 +118,23 @@ class Robot():
 		self.scan_data = self.scan_info
 		for i in range (self.num_particles):
 			pz_array = []
-			for j in range (100):
+			for j in range (10):
 				angle = self.particle_array[i].theta + self.scan_data.angle_min + (self.scan_data.angle_increment * j)
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
 				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
 				
 				if( np.isnan(x) or np.isnan(y) or np.isinf(x) or np.isinf(y) ):
-					lp = 0
+					#lp = 0
+					pz = 0
 				else:
 					lp = self.my_map.get_cell( x, y )
-				if( np.isnan(lp) ):
-					lp = 0
+					pz = (self.laser_z_hit * lp) + self.laser_z_rand
 
-				pz = (self.laser_z_hit * lp) + self.laser_z_rand
+				if( np.isnan(lp) ):
+					#lp = 0
+					pz = 0
+
+				#pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
 			
 			p_tot = 0
@@ -163,8 +167,8 @@ class Robot():
 		self.pose_array.poses = []
 		for i in range (self.num_particles):
 			# x and y are coordinates
-			x = r.random() * self.my_map_width
-			y = r.random() * self.my_map_height
+			y = r.random() * self.my_map_width
+			x = r.random() * self.my_map_height
 			x, y = self.my_map.cell_position (x,y)
 			theta = math.radians(r.random() * 360)
 			pose = get_pose (x,y,theta)	
@@ -173,6 +177,7 @@ class Robot():
 			particle.y = y
 			particle.theta = theta
 			particle.pose = pose
+			particle.weight = (1.0/self.num_particles)
 			self.particle_array.append(particle)
 			self.pose_array.poses.append(pose)
 		
@@ -219,8 +224,7 @@ class Robot():
 	
 	def normalize_weight(self):
 		total = 0
-		#weight_list = [x.weight for x in self.particle_array]
-		#total = sum(weight_list)
+		
 		for k in range (self.num_particles):
 			total += self.particle_array[k].weight
 
@@ -233,48 +237,16 @@ class Robot():
 			total += self.particle_array[m].weight
 		print "total should be 1: ", total
 
-		"""total = 0
-		for k in range (self.num_particles):
-			total += self.particle_array[k].weight
-
-		weight_list = [x.weight for x in self.particle_array]"""
-			
 
 	def resampling_particle(self):
-		"""
-		totalWeight = 0	
-		new_array = []
-		counter = 0
-		while (counter < self.num_particles):
-			random = r.random()
-			for i in range (self.num_particles):
-				weight = self.particle_array[i].weight
-				totalWeight = totalWeight + weight
-				if (random > totalWeight):
-					continue
-				else:
-					new_particle = self.particle_array[i]
-					new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
-					new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
-					new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta) % math.radians(360)
-					new_pose = get_pose(new_x, new_y, new_theta)
-					new_particle.x = new_x
-					new_particle.y = new_y
-					new_particle.theta = new_theta
-					new_particle.pose = new_pose
-					new_array.append(new_particle)
-					totalWeight = 0
-					break
-			
-			counter = counter + 1
-		"""
+
 		print "resampling"
 		self.weight_array = []
 		new_array = []
-		for i in range (800):
+		for i in range (self.num_particles):
 			self.weight_array.append(self.particle_array[i].weight)
 
-		for j in range (800):
+		for j in range (self.num_particles):
 			particle = np.random.choice(self.particle_array, None, True, self.weight_array)
 			new_particle = Particle()	
 			new_particle.x = particle.x
@@ -334,24 +306,17 @@ class Robot():
 		self.kdtree_array = []
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
-				coordinate = self.my_map.cell_position(i,j)
-			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
+				x, y = self.my_map.cell_position(i,j)
+			        value = self.my_map.get_cell(x, y)	
 				if( value == 1.0 ):
-					self.kdtree_array.append([coordinate[0], coordinate[1]])	
+					self.kdtree_array.append([x, y])	
 
 		self.kdtree = KDTree (self.kdtree_array)
 		self.update_field()
 
 
 	def update_field(self):
-		"""value = self.kdtree.query(self.query_array, k=1)
-		for i in range (len(self.dist_array)):
-			new_value = self.calculate (value[0][i])
-			r, c = self.grid_array[i]
-			coordinate = self.my_map.cell_position(r,c)
-			if( self.my_map.get_cell(coordinate[0], coordinate[1]) == 0.0):
-				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
-		"""	
+	
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
@@ -370,4 +335,3 @@ class Robot():
 	
 if __name__ == '__main__':
    r = Robot()
-
