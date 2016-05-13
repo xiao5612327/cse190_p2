@@ -4,7 +4,7 @@ import rospy
 import random as r
 import math
 import numpy as np
-from copy import deepcopy
+from copy import deepcopy, copy
 from std_msgs.msg import Bool
 from std_msgs.msg import String, Float32
 from geometry_msgs.msg import PoseArray
@@ -80,7 +80,6 @@ class Robot():
 		)
 
 		self.scan_data_avai = 0
-		#rospy.spin()	
 		self.sensor_loop()
 
 
@@ -123,11 +122,13 @@ class Robot():
 				x = self.particle_array[i].x + self.scan_data.ranges[j] * np.cos(angle)
 				y = self.particle_array[i].y + self.scan_data.ranges[j] * np.sin(angle)
 				
-				### double check with TA!!!!!
 				if( np.isnan(x) or np.isnan(y) or np.isinf(x) or np.isinf(y) ):
 					lp = 0
 				else:
 					lp = self.my_map.get_cell( x, y )
+
+				if( np.isnan(lp) ):
+					lp = 0
 
 				pz = (self.laser_z_hit * lp) + self.laser_z_rand
 				pz_array.append(pz)
@@ -140,7 +141,6 @@ class Robot():
 				else:	
 					p_tot = p_tot + value_cubed
 
-			#self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
 			# set weight to itself if particle goes outside of map
 			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
@@ -149,8 +149,6 @@ class Robot():
 				self.particle_array[i].weight = 0
 			else:
 				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
-
-			total = total + self.particle_array[i].weight
 
 		self.normalize_weight()	
 				
@@ -227,15 +225,18 @@ class Robot():
 	
 	def normalize_weight(self):
 		total = 0
-		total1 = 0
-		for x in range (self.num_particles):
-			total = total + self.particle_array[x].weight
-		for j in range (self.num_particles):
-			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
-		for k in range (self.num_particles):
-			total1 = total1 + self.particle_array[j].weight
+		weight_list = [x.weight for x in self.particle_array]
+		total = sum(weight_list)
 
-		print "sum should be 1: ",total1
+		for j in range (self.num_particles):
+			self.particle_array[j].weight /= total
+
+		total = 0
+		for k in range (self.num_particles):
+			total += self.particle_array[k].weight
+
+		print "sum should be 1: ", total
+		weight_list = [x.weight for x in self.particle_array]
 			
 
 	def resampling_particle(self):
@@ -269,52 +270,17 @@ class Robot():
 		print "resampling"
 		self.weight_array = []
 		new_array = []
-		self.normalize_weight()	
 		for i in range (800):
 			self.weight_array.append(self.particle_array[i].weight)
 
 		for j in range (800):
-			new_particle = np.random.choice(self.particle_array, None, True, self.weight_array)
-			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
-			new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
-			new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta) % math.radians(360)
-			new_pose = get_pose(new_x, new_y, new_theta)
-			new_particle.x = new_x
-			new_particle.y = new_y
-			new_particle.theta = new_theta
-			new_particle.pose = new_pose
-			new_array.append(new_particle)
-		
-		for m in range (self.num_particles):
-			self.particle_array[m] = new_array[m]
-			self.pose_array.poses[m] = new_array[m].pose
-		
-		self.normalize_weight()	
-		# publish the pose array
-		rospy.sleep(1)
-		self.particle_pose_pub.publish(self.pose_array)
-
-		"""
-		self.the_list = []
-		new_array = []
-		ddd = 0
-		for i in range (self.num_particles):
-			count = 0
-			w = self.particle_array[i].weight * self.num_particles
-			while (count < w):
-				self.the_list.append(i)
-				count = count + 1
-				ddd = ddd +1
-
-		for k in range (self.num_particles):
-			random = r.randint(0, len(self.the_list)-1)
-		
-			list_index = self.the_list[random]
-		
-			new_particle = self.particle_array[list_index]
-					
-			# set weight to 0 if coordinate is out of map
-				
+			particle = np.random.choice(self.particle_array, None, True, self.weight_array)
+			new_particle = Particle()	
+			new_particle.x = particle.x
+			new_particle.y = particle.y
+			new_particle.theta = particle.theta
+			new_particle.weight = particle.weight
+			new_particle.pose = particle.pose
 			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
 			new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
 			new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta)
@@ -324,17 +290,15 @@ class Robot():
 			new_particle.theta = new_theta
 			new_particle.pose = new_pose
 			new_array.append(new_particle)
-			
+		
 		for m in range (self.num_particles):
 			self.particle_array[m] = new_array[m]
 			self.pose_array.poses[m] = new_array[m].pose
-
-		self.the_list = []
-		new_array = []
+		
+		#self.normalize_weight()	
 		# publish the pose array
 		rospy.sleep(1)
 		self.particle_pose_pub.publish(self.pose_array)
-		"""
 
 
 	def particle_update (self, i):
@@ -367,14 +331,10 @@ class Robot():
 	
 	def construct_field(self):
 		self.kdtree_array = []
-		#self.query_array = []
-		#self.grid_array= []
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
-				#self.query_array.append(coordinate)
 			        value = self.my_map.get_cell(coordinate[0], coordinate[1])	
-				#self.grid_array.append(i,j)
 				if( value == 1.0 ):
 					self.kdtree_array.append([coordinate[0], coordinate[1]])	
 
@@ -394,21 +354,17 @@ class Robot():
 		for i in range (self.my_map_height):
 			for j in range (self.my_map_width):
 				coordinate = self.my_map.cell_position(i,j)
-				value = self.kdtree.query([[coordinate[0],coordinate[1]]], k=1)
-				new_value = self.calculate (value[0][0])
+				dist, idx = self.kdtree.query([[coordinate[0],coordinate[1]]], k=1)
+				new_value = self.calculate (dist)
 				coordinate = self.my_map.cell_position(i,j)
-				if( self.my_map.get_cell(coordinate[0], coordinate[1]) == 0.0):
-					self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
+				#if( self.my_map.get_cell(coordinate[0], coordinate[1]) == 0.0):
+				self.my_map.set_cell(coordinate[0], coordinate[1], new_value)
 
 
 	def calculate (self, distance):
-		"""constant = 2 * math.pi
-		constant = np.float32(math.sqrt(constant)) * self.laser_sigma_hit
-		constant = np.float32(1.0/constant)
-		"""
-		power = np.float32(-1 * ((distance*distance)/(2*self.laser_sigma_hit*self.laser_sigma_hit)))
+		print distance
+		power = (-1.0 * ((distance*distance)/(2.0*self.laser_sigma_hit*self.laser_sigma_hit)))
 		value = math.pow( math.e, power)
-		#value = constant * value
 		return value	
 
 	
