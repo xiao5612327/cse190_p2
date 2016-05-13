@@ -21,7 +21,7 @@ class Particle():
 		self.y = None
 		self.theta = None
 		self.pose = None
-		self.weight = np.float32(1.0/800.0)
+		self.weight = (1.0/800.0)
 
 class Robot():
 	def __init__(self):
@@ -40,6 +40,7 @@ class Robot():
 		self.resample_sigma_y = self.config['resample_sigma_y']
 		self.resample_sigma_theta = self.config['resample_sigma_angle']
 
+		self.handle_map_first_called = 1
 		self.move_made = 0
 		self.map_data_sub = rospy.Subscriber(
 			"/map", 
@@ -79,13 +80,18 @@ class Robot():
 		)
 
 		self.scan_data_avai = 0
-		self.handle_map_data_called = 0
 		#rospy.spin()	
-		while (True):
-			if ( self.handle_map_data_called == 1):
+		self.sensor_loop()
+
+
+
+	def sensor_loop(self):
+		while not rospy.is_shutdown():
+			if ( self.handle_map_first_called == 0):
+				print "went in while(true) loop"
 				self.create_particles()
 				self.construct_field()
-
+				print "finished construct field"
 				# publish OccupancyMap
 				grid_mssg = self.my_map.to_message()
 				rospy.sleep(1)
@@ -106,7 +112,6 @@ class Robot():
 
 
 	def process_scan_data (self):
-		total = 0
 		while( self.scan_data_avai == 0 ):
 			rospy.sleep(1)
 		print "process data"
@@ -139,23 +144,18 @@ class Robot():
 
 			# set weight to itself if particle goes outside of map
 			if( np.isnan(self.particle_array[i].x) or np.isnan(self.particle_array[i].y) or np.isinf(self.particle_array[i].x) or np.isinf(self.particle_array[i].y) ):
-				self.particle_array[i].weight = 0.0
+				self.particle_array[i].weight = self.particle_array[i].weight
 			elif (np.isnan(self.my_map.get_cell(self.particle_array[i].x, self.particle_array[i].y))):
-				self.particle_array[i].weight = 0.0
+				self.particle_array[i].weight = 0
 			else:
 				self.particle_array[i].weight = self.particle_array[i].weight * p_tot
 
 			total = total + self.particle_array[i].weight
 
-		# normalize weights
-		for j in range (self.num_particles):
-			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
-			
+		self.normalize_weight()	
 				
-				
+
 	def create_particles(self):
-		while (self.handle_map_data_called == 0):
-			rospy.sleep(1)
 		self.particle_array = []
 		self.pose_array = PoseArray()		
 		self.pose_array.header.stamp = rospy.Time.now()
@@ -181,11 +181,12 @@ class Robot():
 
 
 	def handle_map_data(self, data):
-		self.tmp_map = data
-		self.my_map = Map(self.tmp_map)
-		self.my_map_width = self.my_map.width
-		self.my_map_height = self.my_map.height
-		self.handle_map_data_called = 1
+		if( self.handle_map_first_called == 1 ):
+			self.my_map = Map(data)
+			self.my_map_width = self.my_map.width
+			self.my_map_height = self.my_map.height
+			self.handle_map_first_called = 0
+			print "handle map is called"	
 		
 		"""self.create_particles()
 		self.num_moves = len(self.move_list)	
@@ -223,8 +224,22 @@ class Robot():
 			self.process_scan_data()	
 			self.resampling_particle()
 
+	
+	def normalize_weight(self):
+		total = 0
+		total1 = 0
+		for x in range (self.num_particles):
+			total = total + self.particle_array[x].weight
+		for j in range (self.num_particles):
+			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
+		for k in range (self.num_particles):
+			total1 = total1 + self.particle_array[j].weight
+
+		print "sum should be 1: ",total1
+			
 
 	def resampling_particle(self):
+		"""
 		totalWeight = 0	
 		new_array = []
 		counter = 0
@@ -239,9 +254,6 @@ class Robot():
 					new_particle = self.particle_array[i]
 					new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
 					new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
-					"""if(np.isnan(self.my_map.get_cell(new_x, new_y))):
-						counter = counter - 1
-						break"""
 					new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta) % math.radians(360)
 					new_pose = get_pose(new_x, new_y, new_theta)
 					new_particle.x = new_x
@@ -253,17 +265,31 @@ class Robot():
 					break
 			
 			counter = counter + 1
+		"""
+		print "resampling"
+		self.weight_array = []
+		new_array = []
+		self.normalize_weight()	
+		for i in range (800):
+			self.weight_array.append(self.particle_array[i].weight)
+
+		for j in range (800):
+			new_particle = np.random.choice(self.particle_array, None, True, self.weight_array)
+			new_x = self.add_resample_noise(new_particle.x, self.resample_sigma_x)
+			new_y = self.add_resample_noise(new_particle.y, self.resample_sigma_y)
+			new_theta = self.add_resample_noise(new_particle.theta, self.resample_sigma_theta) % math.radians(360)
+			new_pose = get_pose(new_x, new_y, new_theta)
+			new_particle.x = new_x
+			new_particle.y = new_y
+			new_particle.theta = new_theta
+			new_particle.pose = new_pose
+			new_array.append(new_particle)
 		
-		total = 0
 		for m in range (self.num_particles):
 			self.particle_array[m] = new_array[m]
 			self.pose_array.poses[m] = new_array[m].pose
-			total = total + self.particle_array[m].weight
 		
-		# normalize weights
-		for j in range (self.num_particles):
-			self.particle_array[j].weight = np.float32(self.particle_array[j].weight/total)
-				
+		self.normalize_weight()	
 		# publish the pose array
 		rospy.sleep(1)
 		self.particle_pose_pub.publish(self.pose_array)
